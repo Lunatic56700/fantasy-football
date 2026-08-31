@@ -30,7 +30,7 @@ STATE_CHANGING = {"me", "u", "undo", "load", "scoring"}
 KNOWN_COMMANDS = {
     "q", "quit", "exit", "h", "help", "?", "b", "best", "l", "list", "avail",
     "r", "roster", "teams", "p", "player", "top", "u", "undo", "scoring",
-    "sheet", "save", "load", "me",
+    "sheet", "save", "load", "me", "plan", "need",
 }
 
 
@@ -124,12 +124,19 @@ class Board:
             print(dim("  nothing left to recommend"))
             return
         roster = s.my_roster()
-        need = roster.needs()
-        need_s = ", ".join(f"{k}x{v}" for k, v in need.items()) if need else "starters full"
-        print(f"\n{bold('BEST PICKS FOR YOU')}  {dim('(still need: ' + need_s + ')')}\n")
+        from . import plan as plan_mod
+        bits = []
+        for row in plan_mod.budget_rows(roster):
+            if row["pos"] in ("K", "DST") and row["have"] == 0 and \
+                    engine.pick_to_round(s.current_pick, s.teams) < config.LATE_ROUND_ONLY.get(row["pos"], 99):
+                continue
+            mark = green(f"{row['have']}/{row['target']}") if row["have"] >= row["target"] \
+                else f"{row['have']}/{row['target']}"
+            bits.append(f"{row['pos']} {mark}")
+        print(f"\n{bold('BEST PICKS FOR YOU')}   {dim('have/want:')} " + dim(" | ").join(bits) + "\n")
         for i, (val, p, reasons, slot) in enumerate(picks, 1):
             marker = green("=>") if i == 1 else "  "
-            tier = f"T{p.tier}" if p.tier else "--"
+            tier = f"T{p.vtier}" if p.vtier else "--"
             print(f" {marker} {bold(str(i)+'.')} {bold(p.name):<30} {pos_tag(p):<14} {p.team:<4}"
                   f" {dim(tier)}  proj {p.proj or 0:.0f}  VOR {p.vor:.0f}")
             for r in reasons[:4]:
@@ -145,9 +152,9 @@ class Board:
         print(f"\n{bold('BEST AVAILABLE' + (' - ' + pos if pos else ''))}\n")
         last_tier = None
         for p in avail[:n]:
-            if p.tier != last_tier and pos:
-                print(dim(f"   -- tier {p.tier} --"))
-                last_tier = p.tier
+            if p.vtier != last_tier and pos:
+                print(dim(f"   -- tier {p.vtier} --"))
+                last_tier = p.vtier
             print("  " + fmt_row(p))
         print()
 
@@ -155,24 +162,57 @@ class Board:
         s = self.state
         team = team or s.slot
         r = s.rosters[team]
-        title = "YOUR ROSTER" if team == s.slot else f"TEAM {team}"
+        title = "YOUR LINEUP" if team == s.slot else f"TEAM {team}"
         print(f"\n{bold(title)}\n")
-        if not r.players:
-            print(dim("  (empty)\n"))
-            return
-        order = {"QB": 0, "RB": 1, "WR": 2, "TE": 3, "K": 4, "DST": 5}
-        total = 0.0
-        for p in sorted(r.players, key=lambda x: (order.get(x.pos, 9), -(x.proj or 0))):
-            total += p.proj or 0
-            print(f"   {pos_tag(p):<14} {p.name:<30} {p.team:<4} proj {p.proj or 0:6.0f}"
-                  f"{dim('  bye ' + str(p.bye)) if p.bye else ''}")
-        print(f"\n   {dim('projected total:')} {bold(f'{total:.0f}')} pts")
-        need = r.needs()
-        if need:
-            print(f"   {dim('still need:')} " + ", ".join(f"{k} x{v}" for k, v in need.items()))
+
+        slots, bench = r.lineup()
+        starting = 0.0
+        for label, p in slots:
+            if p is None:
+                print(f"   {bold(label.ljust(6))}  {dim('-- empty --')}")
+            else:
+                starting += p.proj or 0
+                bye = dim("  bye " + str(p.bye)) if p.bye else ""
+                print(f"   {bold(label.ljust(6))}  {p.name:<28} "
+                      f"{c(p.pos.ljust(4), POS_COLOR.get(p.pos, '0'))} {p.team:<4}"
+                      f" proj {p.proj or 0:6.0f}{bye}")
+        if bench:
+            print(f"\n   {dim('BENCH')}")
+            for p in bench:
+                print(f"   {'':<6}  {dim(p.name.ljust(28))} "
+                      f"{c(p.pos.ljust(4), POS_COLOR.get(p.pos, '0'))} {p.team:<4}"
+                      f" proj {p.proj or 0:6.0f}")
+        print(f"\n   {dim('projected starting points:')} {bold(f'{starting:.0f}')}")
+
+        if team == s.slot:
+            self.show_progress()
         byes = {w: len(v) for w, v in r.bye_weeks().items() if len(v) >= 3}
         if byes:
-            print(yellow(f"   heavy bye weeks: " + ", ".join(f"wk{w} ({n} players)" for w, n in sorted(byes.items()))))
+            print(yellow("   heavy bye weeks: " + ", ".join(
+                f"wk{w} ({n} players)" for w, n in sorted(byes.items()))))
+        print()
+
+    def show_progress(self):
+        """One line per position: how many you have vs how many you want."""
+        from . import plan as plan_mod
+        roster = self.state.my_roster()
+        print(f"\n   {bold('POSITION PROGRESS')}")
+        for row in plan_mod.budget_rows(roster):
+            have, target = row["have"], row["target"]
+            filled = "#" * min(have, target)
+            empty = "." * max(0, target - have)
+            over = "+" * max(0, have - target)
+            bar = c(filled, POS_COLOR.get(row["pos"], "0")) + dim(empty) + yellow(over)
+            still = max(0, target - have)
+            tag = green("done") if still == 0 else f"need {still} more"
+            print(f"   {row['pos']:<5} {bar:<24} {have}/{target}  {dim(tag)}")
+
+    def show_plan(self):
+        from . import plan as plan_mod
+        print()
+        print(plan_mod.render_budget(self.state.my_roster()))
+        print()
+        print(plan_mod.render_timeline(self.a))
         print()
 
     def show_all_rosters(self):
@@ -192,7 +232,7 @@ class Board:
             print(f"  {dim('actual ' + str(config.ACTUALS_SEASON) + ':')} {p.last:.1f} pts{gp}")
         if p.ecr:
             print(f"  {dim('expert consensus rank:')} {p.ecr:.0f}"
-                  + (f"  (tier {p.tier})" if p.tier else "")
+                  + (f"  (tier {p.vtier})" if p.vtier else "")
                   + (f"   best {p.expert_best:.0f} / worst {p.expert_worst:.0f}" if p.expert_best else ""))
         if p.adp:
             print(f"  {dim('average draft position:')} {p.adp:.1f}")
@@ -293,7 +333,8 @@ class Board:
   {cyan('me <name>')}       record a pick for YOUR team
   {cyan('b')} / best        show your best picks right now, with reasons
   {cyan('l')} / list [POS]  best available (optionally RB/WR/TE/QB/K/DST)
-  {cyan('r')} / roster      your roster and what you still need
+  {cyan('r')} / roster      your lineup, bench, and position progress
+  {cyan('plan')}            how many of each position to draft, and how long you can wait
   {cyan('teams')}           every team's roster
   {cyan('p')} / player <n>  full detail on one player
   {cyan('top')} [POS]       last season's actual best scorers
@@ -340,6 +381,8 @@ class Board:
                 self.show_roster()
             elif cmd == "teams":
                 self.show_all_rosters()
+            elif cmd in ("plan", "need"):
+                self.show_plan()
             elif cmd in ("p", "player"):
                 if not arg:
                     print(dim("  usage: player <name>"))

@@ -63,6 +63,50 @@ class Roster:
             return "surplus"
         return "bench"
 
+    def lineup(self):
+        """Assign your players to actual starting slots, best player first.
+
+        Returns (slots, bench) where slots is a list of (slot_name, player_or_None).
+        """
+        pool = {}
+        for p in self.players:
+            pool.setdefault(p.pos, []).append(p)
+        for pos in pool:
+            pool[pos].sort(key=lambda x: -(x.proj or 0))
+
+        slots, used = [], set()
+
+        def take(pos):
+            for p in pool.get(pos, []):
+                if id(p) not in used:
+                    used.add(id(p))
+                    return p
+            return None
+
+        for pos in ("QB", "RB", "WR", "TE"):
+            n = config.STARTERS.get(pos, 0)
+            for i in range(n):
+                label = f"{pos}{i + 1}" if n > 1 else pos
+                slots.append((label, take(pos)))
+
+        for i in range(config.STARTERS.get("FLEX", 0)):
+            best = None
+            for pos in config.FLEX_POSITIONS:
+                for p in pool.get(pos, []):
+                    if id(p) not in used and (best is None or (p.proj or 0) > (best.proj or 0)):
+                        best = p
+            if best is not None:
+                used.add(id(best))
+            slots.append(("FLEX", best))
+
+        for pos in ("K", "DST"):
+            for i in range(config.STARTERS.get(pos, 0)):
+                slots.append((pos, take(pos)))
+
+        bench = [p for p in self.players if id(p) not in used]
+        bench.sort(key=lambda x: -(x.proj or 0))
+        return slots, bench
+
     def bye_weeks(self):
         byes = {}
         for p in self.players:
@@ -102,15 +146,28 @@ class Recommender:
         base = max(p.vor, 0.0) + residual
 
         have = roster.count(p.pos)
-        if slot == "starter":
-            mult = 1.0
-        elif slot == "flex":
-            mult = 0.85
-        elif have >= MAX_AT_POS.get(p.pos, 8):
+        plan = engine.roster_plan().get(p.pos, {})
+        must = plan.get("must_start", 0)
+        target = plan.get("target", MAX_AT_POS.get(p.pos, 8))
+
+        # You shouldn't be filling your FLEX while a required starting slot
+        # is still empty. Taking a second tight end in round 3 with no
+        # receivers is exactly the trap this closes.
+        starters_missing = sum(
+            max(0, config.STARTERS.get(q, 0) - roster.count(q))
+            for q in config.SKILL_POSITIONS)
+        this_fills_required = have < must
+        flex_open = slot == "flex" and (starters_missing - (1 if this_fills_required else 0)) <= 0
+
+        if have >= MAX_AT_POS.get(p.pos, 8):
             mult = 0.0
+        elif this_fills_required:
+            mult = 1.0
         elif p.pos not in config.FLEX_POSITIONS:
             mult = NO_FLEX_BACKUP
-        elif slot == "bench":
+        elif flex_open and have < target:
+            mult = 0.85
+        elif have < target:
             mult = BENCH_DISCOUNT
         else:
             mult = SURPLUS_DISCOUNT
@@ -126,8 +183,8 @@ class Recommender:
             reasons.append(f"don't draft a {p.pos} until round {min_round}+")
 
         # Tier cliff: if his tier is nearly empty, waiting costs you real points.
-        left = self.a.tier_remaining(p.pos, p.tier, self.s.drafted_keys)
-        if left is not None and p.tier is not None:
+        left = self.a.tier_remaining(p.pos, p.vtier, self.s.drafted_keys)
+        if left is not None and p.vtier is not None:
             if left <= 2 and slot in ("starter", "flex"):
                 val *= 1.18
                 reasons.append(f"only {left} left in this {p.pos} tier -- big drop after")
@@ -184,10 +241,14 @@ class Recommender:
             val *= 0.96
             reasons.append(f"bye week {p.bye} is getting crowded")
 
-        if slot == "starter":
+        if this_fills_required:
             reasons.insert(0, f"fills your empty {p.pos} slot")
-        elif slot == "flex":
-            reasons.insert(0, "fills your FLEX")
+        elif mult == 0.85:
+            reasons.insert(0, f"fills your FLEX ({p.pos} {have + 1} of {target})")
+        elif have < target and p.pos in config.FLEX_POSITIONS:
+            reasons.insert(0, f"depth: {p.pos} {have + 1} of {target} you want")
+        elif have >= target and p.pos in config.FLEX_POSITIONS:
+            reasons.insert(0, f"you already have your {target} {p.pos}s")
         elif roster.count(p.pos) >= MAX_AT_POS.get(p.pos, 8):
             reasons.insert(0, f"you already have enough {p.pos}s -- don't")
         elif p.pos not in config.FLEX_POSITIONS:

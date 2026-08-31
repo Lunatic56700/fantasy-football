@@ -13,6 +13,7 @@ Built for a **10-team snake draft**. Scoring format is a one-line toggle.
 
 ```bash
 python3 draft.py update      # refresh the data (do this right before the draft)
+python3 draft.py plan        # how many of each position you need  <- read this first
 python3 draft.py sheet       # make a printable cheat sheet
 python3 draft.py live        # open the live draft board
 ```
@@ -41,6 +42,63 @@ BEST PICKS FOR YOU  (still need: QBx1, RBx2, WRx2, TEx1, Kx1, DSTx1, FLEXx1)
 Partial names work (`gibbs`, `jamarr`, `st brown`). If it's ambiguous it asks.
 
 No `pip install` needed — it's all standard library Python 3.
+
+---
+
+## How many of each position do you need?
+
+You have **15 roster spots** and you can't just take running backs. Run
+`python3 draft.py plan` and it prints this:
+
+| Pos | You start | Draft this many | Why |
+|---|---|---|---|
+| **QB** | 1 | **1** | You only start one, and late-round QBs score nearly as much. Don't reach. |
+| **RB** | 2 | **5** | You start 2, plus they fill your FLEX. They get hurt the most, so carry extras. |
+| **WR** | 2 | **5** | You start 2, plus they fill your FLEX. Deepest position — good ones last into the middle rounds. |
+| **TE** | 1 | **2** | Get a top-3 guy early or wait until late. The middle is a dead zone. |
+| **K** | 1 | **1** | Interchangeable. **Last round, never earlier.** |
+| **DST** | 1 | **1** | Nearly interchangeable. Second-to-last round. |
+
+That's 8 starters + 1 FLEX + 6 bench = 15 picks. These numbers aren't
+hardcoded — they're computed from your league settings, so if you change the
+roster in `ff/config.py` they change too.
+
+**FLEX** means one extra slot you can fill with any RB, WR, or TE. That's why
+you draft more RBs and WRs than you start.
+
+### How long can you wait?
+
+The other half of the question. This is measured from real draft data — the
+pick by which each group is typically gone:
+
+```
+RB   top 5 by pick ~8   | top 12 by ~18  | top 16 by ~32  | top 24 by ~60
+WR   top 5 by pick ~12  | top 10 by ~24  | top 21 by ~47  | top 29 by ~71
+TE   top 1 by pick ~22  | top 3  by ~44  | top 4  by ~51  | top 8  by ~77
+QB   top 2 by pick ~35  | top 6  by ~69  | top 10 by ~98  | top 20 by ~189
+```
+
+Read it as: *elite running backs are gone by pick 8, but you can still get a
+top-10 quarterback at pick 98.* That's the whole argument for waiting on QB.
+
+### Your likely draft, round by round
+
+`python3 draft.py plan --slot 4` simulates the draft — everyone else picking by
+average draft position, you picking by value — and shows the shape of it:
+
+```
+  R1       4   RB    Jonathan Taylor       RB1
+  R2      17   TE    Brock Bowers          RB1 TE1
+  R3      24   WR    George Pickens        RB1 WR1 TE1
+  R4      37   RB    Travis Etienne        RB2 WR1 TE1
+  ...
+  R13    124   DST   Philadelphia Eagles
+  R14    137   K     Ka'imi Fairbairn
+  Ends with: 1 QB, 5 RB, 5 WR, 2 TE, 1 K, 1 DST
+```
+
+Real drafts wander, so treat it as a shape, not a script. During the live
+draft the tool tracks this for you and won't let you overload a position.
 
 ---
 
@@ -94,7 +152,8 @@ when you reach.
 | `me <name>` | Force a pick onto your team |
 | `b` | Your best picks right now, with reasons |
 | `l` / `l RB` | Best available, overall or by position |
-| `r` | Your roster and what you still need |
+| `r` | Your lineup, bench, and position progress |
+| `plan` | How many of each position to draft, and how long you can wait |
 | `teams` | Every team's roster |
 | `p <name>` | Full detail on one player |
 | `top` / `top RB` | Last season's actual best scorers |
@@ -148,8 +207,9 @@ Grounded in what the analysts are actually saying for 2026:
 1. **Round 1: take the best running back available.** There's a clear gap
    between the top two backs (Gibbs, Bijan Robinson) and everyone else. Elite
    RBs are the scarcest thing in fantasy.
-2. **Rounds 2–5: load up on receivers and one more back.** This is where
-   starting lineups get won.
+2. **Rounds 2–6: fill your starting receivers and a second back.** Get to
+   2 RB and 2 WR before you start drafting depth — this is where starting
+   lineups get won.
 3. **Don't draft a quarterback early.** The gap between QB1 and QB10 is small.
    Rounds 6–9 is fine.
 4. **One elite tight end or wait entirely.** The position falls off a cliff
@@ -177,6 +237,7 @@ Run `python3 draft.py update` before the draft to get same-day injury news.
 ## Other commands
 
 ```bash
+python3 draft.py plan --slot 4              # position plan + round-by-round
 python3 draft.py rank --pos RB --limit 40   # rankings, any position
 python3 draft.py top --pos WR               # last season's actual leaders
 python3 draft.py sheet --limit 250          # bigger cheat sheet

@@ -49,7 +49,7 @@ def norm_team(team):
 class Player:
     __slots__ = ("name", "pos", "team", "age", "bye", "injury", "proj", "last",
                  "last_gp", "proj_gp", "adp", "ecr", "tier", "expert_best",
-                 "expert_worst", "expert_stdev", "expert_delta", "pos_rank",
+                 "expert_worst", "expert_stdev", "expert_delta", "pos_rank", "vtier",
                  "vor", "value", "sleeper_id", "drafted_by", "rank")
 
     def __init__(self, **kw):

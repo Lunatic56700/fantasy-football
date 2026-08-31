@@ -13,7 +13,7 @@ Everything runs on the Python standard library. No pip install.
 import argparse
 import sys
 
-from ff import config, engine, fetch, players, sheet
+from ff import config, engine, fetch, plan, players, sheet
 from ff.board import Board
 
 
@@ -82,6 +82,22 @@ def cmd_top(args):
     return 0
 
 
+def cmd_plan(args):
+    a, _, _ = build_analyzer(args.scoring)
+    print()
+    print(plan.render_budget())
+    print()
+    print(plan.render_timeline(a))
+    if args.slot:
+        print()
+        print(plan.render_path(a, args.slot))
+    else:
+        print()
+        print("  Add --slot N (your first-round pick) to see a round-by-round plan.")
+    print()
+    return 0
+
+
 def cmd_live(args):
     a, n, matched = build_analyzer(args.scoring)
     slot = args.slot
@@ -124,6 +140,11 @@ def main(argv=None):
     p = sub.add_parser("live", help="interactive draft board")
     p.add_argument("--slot", type=int, default=None, help="your first-round pick number")
     p.set_defaults(func=cmd_live)
+
+    p = sub.add_parser("plan", help="how many of each position to draft")
+    p.add_argument("--slot", type=int, default=None,
+                   help="your first-round pick, for a round-by-round plan")
+    p.set_defaults(func=cmd_plan)
 
     p = sub.add_parser("sheet", help="write printable cheat sheets")
     p.add_argument("--limit", type=int, default=200)
