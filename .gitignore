@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+
+# Generated at runtime -- regenerate with `python3 draft.py sheet`
+cheatsheet_*.txt
+cheatsheet_*.html
+
+# Live draft progress (autosaved during a draft)
+draft_progress.json
