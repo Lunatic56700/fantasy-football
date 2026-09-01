@@ -26,11 +26,11 @@ def mag(t):    return c(t, "35")
 POS_COLOR = {"RB": "32", "WR": "36", "TE": "35", "QB": "33", "K": "2", "DST": "2"}
 
 # Anything that moves the draft forward redraws the board; the rest just prints.
-STATE_CHANGING = {"me", "u", "undo", "load", "scoring"}
+STATE_CHANGING = {"me", "u", "undo", "load", "scoring", "gone", "took"}
 KNOWN_COMMANDS = {
     "q", "quit", "exit", "h", "help", "?", "b", "best", "l", "list", "avail",
     "r", "roster", "teams", "p", "player", "top", "u", "undo", "scoring",
-    "sheet", "save", "load", "me", "plan", "need",
+    "sheet", "save", "load", "me", "plan", "need", "gone", "took",
 }
 
 
@@ -324,13 +324,23 @@ class Board:
         self.rec = Recommender(self.a, self.state)
         print(green(f"  scoring switched to {new.upper()} -- all rankings recomputed"))
 
+    def prompt(self):
+        """The input prompt says whose pick you're about to type in."""
+        s = self.state
+        if s.is_complete():
+            return bold("draft over > ")
+        if s.is_my_pick():
+            return bold(green(f"pick {s.current_pick} -- YOUR PICK > "))
+        return bold(f"pick {s.current_pick} (Team {s.team_on_clock()}) > ")
+
     # -- main loop ---------------------------------------------------------
     def help(self):
         print(f"""
 {bold('COMMANDS')}  {dim('(just type a name to record a pick)')}
 
-  {cyan('<name>')}          record the pick for whoever is on the clock
-  {cyan('me <name>')}       record a pick for YOUR team
+  {cyan('<name>')}          someone else took him -- marks him gone, advances the pick
+  {cyan('gone <name>')}     same thing, spelled out
+  {cyan('me <name>')}       YOU took him
   {cyan('b')} / best        show your best picks right now, with reasons
   {cyan('l')} / list [POS]  best available (optionally RB/WR/TE/QB/K/DST)
   {cyan('r')} / roster      your lineup, bench, and position progress
@@ -350,14 +360,16 @@ class Board:
         print(bold(cyan(f"\n  Fantasy draft helper -- {config.TEAMS}-team {config.DRAFT_TYPE}, "
                         f"{self.scoring.upper()} scoring, you pick at slot {self.state.slot}")))
         print(dim(f"  Your picks: {', '.join(str(x) for x in self.state.my_picks[:8])} ..."))
-        print(dim("  Type 'h' for commands. Type a player's name to record a pick.\n"))
+        print(dim("  As each player comes off the board, just type his name -- that marks"))
+        print(dim("  him gone. Use 'me <name>' when the pick is yours. 'h' for all commands."))
+        print(dim("  Wrong name? Type 'u' to undo.\n"))
         self.header()
         if self.state.is_my_pick():
             self.show_best()
 
         while True:
             try:
-                raw = input(bold("\n> ")).strip()
+                raw = input("\n" + self.prompt()).strip()
             except (EOFError, KeyboardInterrupt):
                 print("\n  bye")
                 return
@@ -421,6 +433,9 @@ class Board:
                     print(red(f"  could not load: {e}"))
             elif cmd == "me":
                 self.do_pick(arg, to_me=True)
+            elif cmd in ("gone", "took"):
+                # Same as typing the name -- just spelled out for clarity.
+                self.do_pick(arg)
             else:
                 self.do_pick(raw)
 

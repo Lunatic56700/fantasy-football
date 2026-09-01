@@ -9,6 +9,74 @@ Built for a **10-team snake draft**. Scoring format is a one-line toggle.
 
 ---
 
+## Getting it on your computer
+
+Open a terminal — **Mac:** press `Cmd+Space`, type `Terminal`, hit enter.
+**Windows:** press the Start key, type `PowerShell`, hit enter.
+
+Then paste these one at a time:
+
+```bash
+git clone -b claude/fantasy-football-draft-helper-07xmo4 https://github.com/Lunatic56700/fantasy-football.git
+cd fantasy-football
+python3 draft.py update
+python3 draft.py live
+```
+
+On Windows, if `python3` isn't recognized, use `python` instead.
+
+You need Python 3.8 or newer (Macs have it already; on Windows get it from
+[python.org](https://www.python.org/downloads/) and tick *"Add Python to PATH"*
+during install). Nothing else to install — no `pip install` step.
+
+To come back to it later, or to pick up a draft you already started:
+
+```bash
+cd fantasy-football
+python3 draft.py live
+```
+
+It autosaves after every pick, so if the terminal closes mid-draft, reopen it
+and type `load`.
+
+---
+
+## Recording picks during the draft
+
+There are only two things to type.
+
+**Someone else took a player** — just type his name. That's the default,
+because it's most of what happens:
+
+```
+pick 3 (Team 3) > jamarr chase
+  pick 3: Team 3 -> Ja'Marr Chase (WR-CIN)
+```
+
+You don't have to care *which* team took him — the tool assigns him to
+whoever's on the clock and moves on. All that matters is he's off the board.
+
+**You took a player** — put `me` in front:
+
+```
+pick 4 -- YOUR PICK > me jonathan taylor
+  pick 4: YOU -> Jonathan Taylor (RB-IND)
+```
+
+The prompt always tells you whose pick you're entering, so you can see at a
+glance whether to type `me`.
+
+A few things that make this painless:
+
+- **Partial names work.** `gibbs`, `st brown`, `jamarr` all hit. If it's
+  ambiguous it lists the matches and asks.
+- **Typed the wrong guy?** Type `u` to undo the last pick.
+- **`gone <name>`** does the same thing as typing the name, if you prefer
+  spelling it out.
+- **Fell behind?** Just enter the picks you missed in order; it catches up.
+
+---
+
 ## Draft day in 60 seconds
 
 ```bash
@@ -148,8 +216,9 @@ when you reach.
 
 | Command | What it does |
 |---|---|
-| `<name>` | Record a pick for whoever's on the clock |
-| `me <name>` | Force a pick onto your team |
+| `<name>` | Someone else took him — marks him gone |
+| `gone <name>` | Same thing, spelled out |
+| `me <name>` | **You** took him |
 | `b` | Your best picks right now, with reasons |
 | `l` / `l RB` | Best available, overall or by position |
 | `r` | Your lineup, bench, and position progress |
